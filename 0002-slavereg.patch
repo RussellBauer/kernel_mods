@@ -1,0 +1,67 @@
+From 4e25ed9c165d4532c6a00fc09a090095e2905cec Mon Sep 17 00:00:00 2001
+From: russell <russell.bauer@dell.com>
+Date: Wed, 8 Nov 2017 15:58:15 -0600
+Subject: [PATCH 2/2] slavereg
+
+Signed-off-by: russell <russell.bauer@dell.com>
+---
+ drivers/i2c/i2c-slave-eeprom.c | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/i2c/i2c-slave-eeprom.c b/drivers/i2c/i2c-slave-eeprom.c
+index b2039f94c9d8..1c64c59290fe 100644
+--- a/drivers/i2c/i2c-slave-eeprom.c
++++ b/drivers/i2c/i2c-slave-eeprom.c
+@@ -26,7 +26,8 @@ struct eeprom_data {
+ 	struct bin_attribute bin;
+ 	bool first_write;
+ 	spinlock_t buffer_lock;
+-	u8 buffer_idx;
++	u16 buffer_index_offset;
++	u16 buffer_idx;
+ 	u8 buffer[];
+ };
+ 
+@@ -38,7 +39,7 @@ static int i2c_slave_eeprom_slave_cb(struct i2c_client *client,
+ 	switch (event) {
+ 	case I2C_SLAVE_WRITE_RECEIVED:
+ 		if (eeprom->first_write) {
+-			eeprom->buffer_idx = *val;
++			eeprom->buffer_idx = *val * eeprom->buffer_index_offset;
+ 			eeprom->first_write = false;
+ 		} else {
+ 			spin_lock(&eeprom->buffer_lock);
+@@ -65,7 +66,10 @@ static int i2c_slave_eeprom_slave_cb(struct i2c_client *client,
+ 	case I2C_SLAVE_STOP:
+ 	case I2C_SLAVE_WRITE_REQUESTED:
+ 		eeprom->first_write = true;
+-		break;
++		eeprom->buffer_idx &= 0xff80;		//point back to begining of register
++                eeprom->buffer[0x7fff] = eeprom->buffer_idx >>8; //this is for debug, leave
++		eeprom->buffer[0x7ffe] = eeprom->buffer_idx;     //till driver is done
++ 		break;
+ 
+ 	default:
+ 		break;
+@@ -114,6 +118,7 @@ static int i2c_slave_eeprom_probe(struct i2c_client *client, const struct i2c_de
+ 	if (!eeprom)
+ 		return -ENOMEM;
+ 
++	eeprom->buffer_index_offset = (size/256);	//this will break a part into 256 X n registers
+ 	eeprom->first_write = true;
+ 	spin_lock_init(&eeprom->buffer_lock);
+ 	i2c_set_clientdata(client, eeprom);
+@@ -149,7 +154,9 @@ static int i2c_slave_eeprom_remove(struct i2c_client *client)
+ }
+ 
+ static const struct i2c_device_id i2c_slave_eeprom_id[] = {
+-	{ "slave-24c02", 2048 / 8 },
++//	{ "slave-24c02", 2048 / 8},
++	{ "slave-256reg", 32768}, //256 X 128
++	{ "slave-24c02", 2048 /8 },
+ 	{ }
+ };
+ MODULE_DEVICE_TABLE(i2c, i2c_slave_eeprom_id);
+-- 
+2.11.0
+
