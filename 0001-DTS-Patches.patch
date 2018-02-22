@@ -1,0 +1,117 @@
+From 855c3656e611017ee7d1bfe3d663d17b4a9a5fac Mon Sep 17 00:00:00 2001
+From: russell <russell.bauer@dell.com>
+Date: Wed, 21 Feb 2018 18:12:57 -0600
+Subject: [PATCH] DTS Patches
+
+Signed-off-by: russell <russell.bauer@dell.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-opp-witherspoon.dts | 86 ++++++++++++------------
+ 1 file changed, 43 insertions(+), 43 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-opp-witherspoon.dts b/arch/arm/boot/dts/aspeed-bmc-opp-witherspoon.dts
+index d73512c2cef4..a98367b3ffea 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-opp-witherspoon.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-opp-witherspoon.dts
+@@ -90,48 +90,48 @@
+ 	leds {
+ 		compatible = "gpio-leds";
+ 
+-		fan0 {
+-			retain-state-shutdown;
+-			default-state = "keep";
+-			gpios = <&pca0 0 GPIO_ACTIVE_LOW>;
+-		};
+-
+-		fan1 {
+-			retain-state-shutdown;
+-			default-state = "keep";
+-			gpios = <&pca0 1 GPIO_ACTIVE_LOW>;
+-		};
+-
+-		fan2 {
+-			retain-state-shutdown;
+-			default-state = "keep";
+-			gpios = <&pca0 2 GPIO_ACTIVE_LOW>;
+-		};
+-
+-		fan3 {
+-			retain-state-shutdown;
+-			default-state = "keep";
+-			gpios = <&pca0 3 GPIO_ACTIVE_LOW>;
+-		};
+-
+-		front-fault {
+-			retain-state-shutdown;
+-			default-state = "keep";
+-			gpios = <&pca0 13 GPIO_ACTIVE_LOW>;
+-		};
+-
+-		front-power {
+-			retain-state-shutdown;
+-			default-state = "keep";
+-			gpios = <&pca0 14 GPIO_ACTIVE_LOW>;
+-		};
+-
+-		front-id {
+-			retain-state-shutdown;
+-			default-state = "keep";
+-			gpios = <&pca0 15 GPIO_ACTIVE_LOW>;
+-		};
+-
++/*		fan0 {
++*			retain-state-shutdown;
++*			default-state = "keep";
++*			gpios = <&pca0 0 GPIO_ACTIVE_LOW>;
++*		};
++*
++*		fan1 {
++*			retain-state-shutdown;
++*			default-state = "keep";
++*			gpios = <&pca0 1 GPIO_ACTIVE_LOW>;
++*		};
++*
++*		fan2 {
++*			retain-state-shutdown;
++*			default-state = "keep";
++*			gpios = <&pca0 2 GPIO_ACTIVE_LOW>;
++*		};
++*
++*		fan3 {
++*			retain-state-shutdown;
++*			default-state = "keep";
++*			gpios = <&pca0 3 GPIO_ACTIVE_LOW>;
++*		};
++*
++*		front-fault {
++*			retain-state-shutdown;
++*			default-state = "keep";
++*			gpios = <&pca0 13 GPIO_ACTIVE_LOW>;
++*		};
++*
++*		front-power {
++*			retain-state-shutdown;
++*			default-state = "keep";
++*			gpios = <&pca0 14 GPIO_ACTIVE_LOW>;
++*		};
++*
++*		front-id {
++*			retain-state-shutdown;
++*			default-state = "keep";
++*			gpios = <&pca0 15 GPIO_ACTIVE_LOW>;
++*		};
++*/
+ 		rear-fault {
+ 			gpios = <&gpio ASPEED_GPIO(N, 2) GPIO_ACTIVE_LOW>;
+ 		};
+@@ -490,7 +490,7 @@
+ };
+ 
+ &i2c7 {
+-	status = "disabled";
++	status = "okay";
+ };
+ 
+ &i2c8 {
+-- 
+2.11.0
+
