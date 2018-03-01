@@ -1,0 +1,361 @@
+From fc4f15f9f56f8803b3cc798847141b49c5e16789 Mon Sep 17 00:00:00 2001
+From: russell <russell.bauer@dell.com>
+Date: Thu, 1 Mar 2018 09:35:18 -0600
+Subject: [PATCH] i2c_salve-eeprom_octl
+
+Signed-off-by: russell <russell.bauer@dell.com>
+---
+ drivers/i2c/i2c-slave-eeprom.c | 285 ++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 282 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/i2c/i2c-slave-eeprom.c b/drivers/i2c/i2c-slave-eeprom.c
+index b2039f94c9d8..3d645aee69e8 100644
+--- a/drivers/i2c/i2c-slave-eeprom.c
++++ b/drivers/i2c/i2c-slave-eeprom.c
+@@ -22,14 +22,282 @@
+ #include <linux/spinlock.h>
+ #include <linux/sysfs.h>
+ 
++#define SC_BMC_MAIL_BOX		(0x05*128)
++#if 1
++//code to add a device and IOCTL
++
++#include <linux/ioctl.h>
++#include <linux/fs.h> 		// required for various structures related to files liked fops.
++#include <linux/cdev.h>
++
++#ifndef SC_BMC_COMM
++#define SC_BMC_COMM 1 		//do not change, the driver is hacked up to only do one   
++#endif
++
++/* Size of a buffer used for data storage */
++#ifndef SC_BMC_COMM_BUFFER_SIZE
++#define SC_BMC_COMM_BUFFER_SIZE 4
++#endif
++
++/* Maxumum length of a block that can be read or written in one operation */
++#ifndef SC_BMC_COMM_BLOCK_SIZE
++#define SC_BMC_COMM_BLOCK_SIZE 1
++#endif
++
++/* The structure to represent 'scbmc_comm' devices. 
++ *  data - data buffer;
++ *  buffer_size - size of the data buffer;
++ *  block_size - maximum number of bytes that can be read or written 
++ *    in one call;
++ *  sc_bmc_comm_mutex - a mutex to protect the fields of this structure;
++ *  cdev - a character device structure.
++ */
++struct sc_bmc_comm_dev {
++	unsigned char *data;
++	unsigned long buffer_size; 
++	unsigned long block_size;  
++	struct mutex sc_bmc_comm_mutex; 
++	struct cdev cdev;
++};
++
++#define IOC_MAGIC 'Q' // defines the magic number
++#define IOCTL_SC_BMC_COMM_REG _IO(IOC_MAGIC,0) // defines our ioctl call
++#define IOCTL_SC_BMC_COMM_UNREG _IO(IOC_MAGIC,1) // defines our ioctl call
++
++#define SC_BMC_COMM_DEVICE_NAME "scbmc_comm"
++
++int open(struct inode *inode, struct file *filp);
++
++
++
++/* parameters */
++static int sc_bmc_comm_ndevices = SC_BMC_COMM;
++static unsigned long sc_bmc_comm_buffer_size = SC_BMC_COMM_BUFFER_SIZE;
++static unsigned long sc_bmc_comm_block_size = SC_BMC_COMM_BLOCK_SIZE;
++
++module_param(sc_bmc_comm_ndevices, int, S_IRUGO);
++module_param(sc_bmc_comm_buffer_size, ulong, S_IRUGO);
++module_param(sc_bmc_comm_block_size, ulong, S_IRUGO);
++/* ================================================================ */
++
++static unsigned int sc_bmc_comm_major = 0;
++static struct sc_bmc_comm_dev *sc_bmc_comm_devices = NULL;
++static struct class *sc_bmc_comm_class = NULL;
++/* ================================================================ */
++
++
++
++
++struct task_struct *tsk;
++
++void notify_BMC_active_command(void){
++
++// 	printk(KERN_INFO "Sending Event!!!\n");
++	send_sig(SIGUSR1, tsk,0);	//let parsing code know a command is present 
++}
++
++long ioctl_funcs(struct file *filp,unsigned int cmd, unsigned long arg)
++{
++int ret=0;
++
++	switch(cmd) {
++		case IOCTL_SC_BMC_COMM_REG:
++ 			printk(KERN_INFO "Register for Events..\n");
++ 			tsk = current;         //this should let the driver know who to signal....
++ 		break;
++
++		case IOCTL_SC_BMC_COMM_UNREG:
++ 			printk(KERN_INFO "UnRegister for Events..\n");
++			tsk = 0;         //this should let the driver know who to signal....
++ 		break;
++ 	}
++	return ret;
++}
++
++int sc_bmc_comm_open(struct inode *inode, struct file *filp)
++{
++//	printk(KERN_INFO "Inside open \n");
++	//no real operation, just get a file hadle for ioctl call
++ 	return 0;
++}
++
++int 
++sc_bmc_comm_release(struct inode *inode, struct file *filp)
++{
++//	printk (KERN_INFO "Inside close\n");
++	return 0;
++}
++
++
++struct file_operations sc_bmc_comm_fops = {
++	.owner =    THIS_MODULE,
++	.open =     sc_bmc_comm_open,
++ 	unlocked_ioctl: ioctl_funcs,
++	.release =  sc_bmc_comm_release,
++};
++
++/* ================================================================ */
++/* Setup and register the device with specific index (the index is also
++ * the minor number of the device).
++ * Device class should be created beforehand.
++ */
++static int
++sc_bmc_comm_construct_device(struct sc_bmc_comm_dev *dev, int minor, 
++	struct class *class)
++{
++	int err = 0;
++	dev_t devno = MKDEV(sc_bmc_comm_major, minor);
++	struct device *device = NULL;
++	
++	BUG_ON(dev == NULL || class == NULL);
++
++	/* Memory is to be allocated when the device is opened the first time */
++	dev->data = NULL;     
++	dev->buffer_size = sc_bmc_comm_buffer_size;
++	dev->block_size = sc_bmc_comm_block_size;
++	mutex_init(&dev->sc_bmc_comm_mutex);
++	
++	cdev_init(&dev->cdev, &sc_bmc_comm_fops);
++	dev->cdev.owner = THIS_MODULE;
++	
++	err = cdev_add(&dev->cdev, devno, 1);
++	if (err)
++	{
++		printk(KERN_WARNING "[target] Error %d while trying to add %s%d",
++			err, SC_BMC_COMM_DEVICE_NAME, minor);
++		return err;
++	}
++
++	device = device_create(class, NULL, /* no parent device */ 
++		devno, NULL, /* no additional data */
++		SC_BMC_COMM_DEVICE_NAME);
++
++	if (IS_ERR(device)) {
++		err = PTR_ERR(device);
++		printk(KERN_WARNING "[target] Error %d while trying to create %s%d",
++			err, SC_BMC_COMM_DEVICE_NAME, minor);
++		cdev_del(&dev->cdev);
++		return err;
++	}
++	return 0;
++}
++
++/* Destroy the device and free its buffer */
++static void
++sc_bmc_comm_destroy_device(struct sc_bmc_comm_dev *dev, int minor,
++	struct class *class)
++{
++	BUG_ON(dev == NULL || class == NULL);
++	device_destroy(class, MKDEV(sc_bmc_comm_major, minor));
++	cdev_del(&dev->cdev);
++	kfree(dev->data);
++	mutex_destroy(&dev->sc_bmc_comm_mutex);
++	return;
++}
++
++/* ================================================================ */
++static void
++sc_bmc_comm_cleanup_module(int devices_to_destroy)
++{
++	int i = 0;
++	
++	printk(KERN_INFO " Inside cleanup_module\n");
++	/* Get rid of character devices (if any exist) */
++	if (sc_bmc_comm_devices) {
++		//for (i = 0; i < devices_to_destroy; ++i) 
++		{
++			sc_bmc_comm_destroy_device(sc_bmc_comm_devices, i, sc_bmc_comm_class);
++		}
++		kfree(sc_bmc_comm_devices);
++	}
++	
++	if (sc_bmc_comm_class)
++		class_destroy(sc_bmc_comm_class);
++
++	/* [NB] sc_bmc_comm_cleanup_module is never called if alloc_chrdev_region()
++	 * has failed. */
++	unregister_chrdev_region(MKDEV(sc_bmc_comm_major, 0), sc_bmc_comm_ndevices);
++
++	return;
++}
++static int __init
++sc_bmc_comm_init_module(void)
++{
++	int err = 0;
++	int i = 0;
++	int devices_to_destroy = 0;
++	dev_t dev = 0;
++	
++	if (sc_bmc_comm_ndevices <= 0)
++	{
++		printk(KERN_WARNING "[target] Invalid value of sc_bmc_comm_ndevices: %d\n", 
++			sc_bmc_comm_ndevices);
++		err = -EINVAL;
++		return err;
++	}
++	
++	/* Get a range of minor numbers (starting with 0) to work with */
++	err = alloc_chrdev_region(&dev, 0, sc_bmc_comm_ndevices, SC_BMC_COMM_DEVICE_NAME);
++	if (err < 0) {
++		printk(KERN_WARNING "[target] alloc_chrdev_region() failed\n");
++		return err;
++	}
++	sc_bmc_comm_major = MAJOR(dev);
++
++	/* Create device class (before allocation of the array of devices) */
++	sc_bmc_comm_class = class_create(THIS_MODULE, SC_BMC_COMM_DEVICE_NAME);
++	if (IS_ERR(sc_bmc_comm_class)) {
++		err = PTR_ERR(sc_bmc_comm_class);
++		goto fail;
++	}
++	
++	/* Allocate the array of devices */
++	sc_bmc_comm_devices = (struct sc_bmc_comm_dev *)kzalloc(
++		sc_bmc_comm_ndevices * sizeof(struct sc_bmc_comm_dev), 
++		GFP_KERNEL);
++	if (sc_bmc_comm_devices == NULL) {
++		err = -ENOMEM;
++		goto fail;
++	}
++	
++	/* Construct devices */
++	for (i = 0; i < sc_bmc_comm_ndevices; ++i){
++		err = sc_bmc_comm_construct_device(&sc_bmc_comm_devices[i], i, sc_bmc_comm_class);
++		if (err) {
++			devices_to_destroy = i;
++			goto fail;
++		}
++	}
++	return 0; /* success */
++
++fail:
++	sc_bmc_comm_cleanup_module(devices_to_destroy);
++	return err;
++}
++
++static void 
++sc_bmc_comm_exit_module(void)
++{
++	sc_bmc_comm_cleanup_module(sc_bmc_comm_ndevices);
++	return;
++}
++
++
++//code to add a device and IOCTL
++#endif
++
++//back to the regular slave driver,with maibox mods....
++
+ struct eeprom_data {
+ 	struct bin_attribute bin;
+ 	bool first_write;
+ 	spinlock_t buffer_lock;
+-	u8 buffer_idx;
++	u16 buffer_index_offset;
++	u16 buffer_idx;
+ 	u8 buffer[];
+ };
+ 
++
+ static int i2c_slave_eeprom_slave_cb(struct i2c_client *client,
+ 				     enum i2c_slave_event event, u8 *val)
+ {
+@@ -38,7 +306,7 @@ static int i2c_slave_eeprom_slave_cb(struct i2c_client *client,
+ 	switch (event) {
+ 	case I2C_SLAVE_WRITE_RECEIVED:
+ 		if (eeprom->first_write) {
+-			eeprom->buffer_idx = *val;
++			eeprom->buffer_idx = *val * eeprom->buffer_index_offset;
+ 			eeprom->first_write = false;
+ 		} else {
+ 			spin_lock(&eeprom->buffer_lock);
+@@ -65,6 +333,12 @@ static int i2c_slave_eeprom_slave_cb(struct i2c_client *client,
+ 	case I2C_SLAVE_STOP:
+ 	case I2C_SLAVE_WRITE_REQUESTED:
+ 		eeprom->first_write = true;
++		eeprom->buffer_idx &= 0xff80;		//point back to begining of register
++	    eeprom->buffer[0x7fff] = eeprom->buffer_idx >>8; //this is for debug, leave
++		eeprom->buffer[0x7ffe] = eeprom->buffer_idx;     //till driver is done
++		if((eeprom->buffer_idx == SC_BMC_MAIL_BOX) && (tsk != NULL)){
++			notify_BMC_active_command();
++		}
+ 		break;
+ 
+ 	default:
+@@ -110,10 +384,12 @@ static int i2c_slave_eeprom_probe(struct i2c_client *client, const struct i2c_de
+ 	int ret;
+ 	unsigned size = id->driver_data;
+ 
++        printk (KERN_ERR "i2c_slave_eeprom_probe...\n");
+ 	eeprom = devm_kzalloc(&client->dev, sizeof(struct eeprom_data) + size, GFP_KERNEL);
+ 	if (!eeprom)
+ 		return -ENOMEM;
+ 
++	eeprom->buffer_index_offset = (size/256);	//this will break a part into 256 X n registers
+ 	eeprom->first_write = true;
+ 	spin_lock_init(&eeprom->buffer_lock);
+ 	i2c_set_clientdata(client, eeprom);
+@@ -134,13 +410,15 @@ static int i2c_slave_eeprom_probe(struct i2c_client *client, const struct i2c_de
+ 		sysfs_remove_bin_file(&client->dev.kobj, &eeprom->bin);
+ 		return ret;
+ 	}
+-
++	 printk (KERN_ERR "Should create dev...\n");
++	sc_bmc_comm_init_module();
+ 	return 0;
+ };
+ 
+ static int i2c_slave_eeprom_remove(struct i2c_client *client)
+ {
+ 	struct eeprom_data *eeprom = i2c_get_clientdata(client);
++	sc_bmc_comm_exit_module();
+ 
+ 	i2c_slave_unregister(client);
+ 	sysfs_remove_bin_file(&client->dev.kobj, &eeprom->bin);
+@@ -150,6 +428,7 @@ static int i2c_slave_eeprom_remove(struct i2c_client *client)
+ 
+ static const struct i2c_device_id i2c_slave_eeprom_id[] = {
+ 	{ "slave-24c02", 2048 / 8 },
++	{ "slave-256reg", 32768},	 //256 X 128
+ 	{ }
+ };
+ MODULE_DEVICE_TABLE(i2c, i2c_slave_eeprom_id);
+-- 
+2.11.0
+
