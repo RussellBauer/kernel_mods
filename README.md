@@ -5,6 +5,8 @@
 
 nano meta-openbmc-machines/meta-openpower/meta-ibm/meta-witherspoon/recipes-kernel/linux/linux-obmc/witherspoon.cfg
 
+Add:
+
 CONFIG_I2C_SLAVE=y
 
 CONFIG_I2C_SLAVE_EEPROM=y
